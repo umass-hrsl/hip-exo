@@ -27,7 +27,7 @@ def Bandwidth_Test(
     signal_type=Signal.sine,
     cmd_freq=500,
     signal_amplitude=500,
-    number_of_loops=4,
+    number_of_loops=15,
     signal_freq=5,
     cycle_delay=0.1,
     request_jitter=False,
@@ -57,12 +57,71 @@ def Bandwidth_Test(
     T = 10,
     n = 1000
     t = np.linspace(0, T, n, endpoint=False)
-    y = chirp(t, start_freq, T, end_freq, method='logarithmic')
+    samples = chirp(t, start_freq, T, end_freq, method='logarithmic')
 
+    requests = []
+    measurements = []
+    times = []
+    cycle_stop_times = []
+    dev_write_command_times = []
+    dev_read_command_times = []
 
+    print("setting up chirp test")
+    # Gains are, in order: kp, ki, kd, K, B & ff
+    fxs.set_gains(dev_id0, 300, 50, 0, 0, 0, 0)
 
+    i = 0
+    start_time = time()
+    for rep in range(number_of_loops):
+        elapsed_time = time() - start_time
+        fxu.print_loop_count_and_time(rep, number_of_loops, elapsed_time)
 
+        dev0_read_time_before = time()
+        data0 = fxs.read_device(dev_id0)
+        dev0_read_time_after = time()
 
+        dev0_write_time_before = time()
+        fxs.send_motor_command(dev_id0, fxe.FX_POSITION, sample + initial_pos_0)
+        dev0_write_time_after = time()
+        measurements0.append(data0.mot_ang - initial_pos_0)
+
+        dev0_read_command_times.append(dev0_read_time_after - dev0_read_time_before)
+        dev0_write_command_times.append(dev0_write_time_after - dev0_write_time_before)
+        times.append(time() - start_time)
+        requests.append(sample)
+        i = i + 1
+
+        cycle_stop_times.append(time() - start_time)
+        fxs.send_motor_command(dev_id0, fxe.FX_NONE, 0)
+        sleep(0.1)
+
+    elapsed_time = time() - start_time
+    actual_period = cycle_stop_times[0]
+    actual_frequency = 1 / actual_period
+    cmd_freq = i / elapsed_time
+
+    figure_counter = 1  # First time, functions will increment
+    figure_counter = fxp.plot_setpoint_vs_desired(
+        dev_id0,
+        figure_counter,
+        controller_type,
+        actual_frequency,
+        signal_amplitude,
+        signal_type_str,
+        cmd_freq,
+        times,
+        requests,
+        measurements0,
+        cycle_stop_times,
+    )
+    figure_counter = fxp.plot_exp_stats(
+        dev_id0, figure_counter, dev0_write_command_times, dev0_read_command_times
+    )
+
+    fxu.print_plot_exit()
+    plt.show()
+    fxs.close_all()
+    fxs.close_all()
 
 
 
