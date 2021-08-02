@@ -22,7 +22,6 @@ def two_position_control(
     baud_rate,
     exp_time=13,
     time_step=0.1,
-    delta=10000,
     transition_time=1.5,
     resolution=100,
 ):
