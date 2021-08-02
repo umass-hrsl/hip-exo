@@ -41,7 +41,7 @@ def two_position_control(
     f0 = 1
     f1 = 15
     t1 = 10
-    t = np.linspace(0, 10, 1500)
+    t = np.linspace(0, 10, 7000)
     position = chirp(t, f0, f1, t1, method='logarithmic')
 
 
