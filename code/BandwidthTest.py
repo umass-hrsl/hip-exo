@@ -1,127 +1,116 @@
 #!/usr/bin/env python3
 
-from math import pi, sin, log, exp
+"""
+FlexSEA Two Position Control Demo
+"""
 from time import sleep, time
-import numpy as np
 from scipy.signal import chirp
-import matplotlib.pyplot as plt
 import matplotlib
+import matplotlib.pyplot as plt
 from flexsea import fxUtils as fxu
 from flexsea import fxEnums as fxe
-from flexsea import fxPlotting as fxp
 from flexsea import flexsea as flex
 
-# Plot in a browser:
 matplotlib.use("WebAgg")
 if fxu.is_pi():
     matplotlib.rcParams.update({"webagg.address": "0.0.0.0"})
-else
-    cmd_freq = 100
-    print(f"Capping the command frequency in Windows to {cmd_freq}")
 
-def Bandwidth_Test(
+
+def two_position_control(
     fxs,
-    ports,
+    port,
     baud_rate,
-    controller_type=fxe.HSS_POSITION,
-    signal_type=Signal.sine,
-    cmd_freq=500,
-    signal_amplitude=500,
-    number_of_loops=15,
-    signal_freq=5,
-    cycle_delay=0.1,
-    request_jitter=False,
-    jitter=20,
+    exp_time=13,
+    time_step=0.1,
+    delta=10000,
+    transition_time=1.5,
+    resolution=100,
 ):
-    debug_logging_level = 6  # 6 is least verbose, 0 is most verbose
-    data_log = False  # Data log logs device data
-
-    delay_time = 1.0 / (float(cmd_freq))
-    print(delay_time)
-
-    # Open the device and start streaming
-    dev_id0 = fxs.open(ports[0], baud_rate, debug_logging_level)
-    fxs.start_streaming(dev_id0, cmd_freq, data_log)
-    print("Connected to device 0 with ID", dev_id0)
-
-    # Get initial position:
-    print("Reading initial position...")
-    # Give the device time to consume the startStreaming command and start streaming
+    """
+    Send two positions commands to test the positionc controller
+    """
+    # Open device
+    dev_id = fxs.open(port, baud_rate, 0)
+    fxs.start_streaming(dev_id, resolution, log_en=True)
     sleep(0.1)
-    data = fxs.read_device(dev_id0)
-    initial_pos_0 = data.mot_ang
-    initial_pos_1 = 0
 
-    start_freq = 1,
-    end_freq = 10,
-    T = 10,
-    n = 1000
-    t = np.linspace(0, T, n, endpoint=False)
-    samples = chirp(t, start_freq, T, end_freq, method='logarithmic')
+    # Setting initial angle and angle waypoints
+    act_pack_state = fxs.read_device(dev_id)
+    initial_angle = act_pack_state.mot_ang
 
+    # Setting angle waypoints
+    f0 = 1
+    f1 = 15
+    t1 = 10
+    t = np.linspace(0, 10, 1500)
+    position = chirp(t, f0, f1, t1, method='logarithmic')
+
+
+    # Setting loop duration and transition rate
+    num_time_steps = int(exp_time / time_step)
+    transition_steps = int(transition_time / time_step)
+
+    # Setting gains (dev_id, kp, ki, kd, K, B, ff)
+    fxs.set_gains(dev_id, 50, 0, 0, 0, 0, 0)
+    # kp=50 and ki=0 is a very soft controller, perfect for bench top experiments
+
+    # Setting position control at initial position
+    fxs.send_motor_command(dev_id, fxe.FX_POSITION, position)
+
+    # Matplotlib - initialize lists
     requests = []
     measurements = []
     times = []
-    cycle_stop_times = []
-    dev_write_command_times = []
-    dev_read_command_times = []
 
-    print("setting up chirp test")
-    # Gains are, in order: kp, ki, kd, K, B & ff
-    fxs.set_gains(dev_id0, 300, 50, 0, 0, 0, 0)
-
-    i = 0
     start_time = time()
-    for rep in range(number_of_loops):
-        elapsed_time = time() - start_time
-        fxu.print_loop_count_and_time(rep, number_of_loops, elapsed_time)
-
-        dev0_read_time_before = time()
-        data0 = fxs.read_device(dev_id0)
-        dev0_read_time_after = time()
-
-        dev0_write_time_before = time()
-        fxs.send_motor_command(dev_id0, fxe.FX_POSITION, sample + initial_pos_0)
-        dev0_write_time_after = time()
-        measurements0.append(data0.mot_ang - initial_pos_0)
-
-        dev0_read_command_times.append(dev0_read_time_after - dev0_read_time_before)
-        dev0_write_command_times.append(dev0_write_time_after - dev0_write_time_before)
+    for i in t:
+        measured_pos = act_pack_state.mot_ang
         times.append(time() - start_time)
-        requests.append(sample)
-        i = i + 1
+        requests.append(position)
+        measurements.append(measured_pos)
 
-        cycle_stop_times.append(time() - start_time)
-        fxs.send_motor_command(dev_id0, fxe.FX_NONE, 0)
-        sleep(0.1)
+    # Disable the controller, send 0 PWM
+    fxs.send_motor_command(dev_id, fxe.FX_VOLTAGE, 0)
+    sleep(0.1)
 
-    elapsed_time = time() - start_time
-    actual_period = cycle_stop_times[0]
-    actual_frequency = 1 / actual_period
-    cmd_freq = i / elapsed_time
-
-    figure_counter = 1  # First time, functions will increment
-    figure_counter = fxp.plot_setpoint_vs_desired(
-        dev_id0,
-        figure_counter,
-        controller_type,
-        actual_frequency,
-        signal_amplitude,
-        signal_type_str,
-        cmd_freq,
-        times,
-        requests,
-        measurements0,
-        cycle_stop_times,
-    )
-    figure_counter = fxp.plot_exp_stats(
-        dev_id0, figure_counter, dev0_write_command_times, dev0_read_command_times
-    )
-
+    # Plot before exit:
+    plt.title("Chirp Test")
+    plt.plot(times, requests, color="b", label="Desired position")
+    plt.plot(times, measurements, color="r", label="Measured position")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Encoder position")
+    plt.legend(loc="upper right")
     fxu.print_plot_exit()
     plt.show()
-    fxs.close_all()
-    fxs.close_all()
+
+    # Close device and do device cleanup
+
+    return fxs.close(dev_id)
 
 
+def main():
+    """
+	Standalone two position control execution
+	"""
+    # pylint: disable=import-outside-toplevel
+    import argparse
 
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "port", metavar="Port", type=str, nargs=1, help="Your device serial port."
+    )
+    parser.add_argument(
+        "-b",
+        "--baud",
+        metavar="B",
+        dest="baud_rate",
+        type=int,
+        default=230400,
+        help="Serial communication baud rate.",
+    )
+    args = parser.parse_args()
+    two_position_control(flex.FlexSEA(), args.port[0], args.baud_rate)
+
+
+if __name__ == "__main__":
+    main()
