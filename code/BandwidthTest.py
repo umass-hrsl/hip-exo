@@ -16,7 +16,7 @@ if fxu.is_pi():
     matplotlib.rcParams.update({"webagg.address": "0.0.0.0"})
 
 
-def two_position_control(
+def bandwidth_test(
     fxs,
     port,
     baud_rate,
@@ -44,17 +44,15 @@ def two_position_control(
     t = np.linspace(0, 10, 7000)
     position = chirp(t, f0, f1, t1, method='logarithmic')
 
-
     # Setting loop duration and transition rate
-    num_time_steps = int(exp_time / time_step)
-    transition_steps = int(transition_time / time_step)
+    # num_time_steps = int(exp_time / time_step)
+    # transition_steps = int(transition_time / time_step)
 
     # Setting gains (dev_id, kp, ki, kd, K, B, ff)
     fxs.set_gains(dev_id, 50, 0, 0, 0, 0, 0)
     # kp=50 and ki=0 is a very soft controller, perfect for bench top experiments
 
-    # Setting position control at initial position
-    fxs.send_motor_command(dev_id, fxe.FX_POSITION, position)
+    # fxs.send_motor_command(dev_id, fxe.FX_POSITION, position)
 
     # Matplotlib - initialize lists
     requests = []
@@ -62,7 +60,9 @@ def two_position_control(
     times = []
 
     start_time = time()
-    for i in t:
+    while t <= 10:
+        fxs.send_motor_command(dev_id, fxe.FX_POSITION, position)
+        act_pack_state = fxs.read_device(dev_id)
         measured_pos = act_pack_state.mot_ang
         times.append(time() - start_time)
         requests.append(position)
@@ -108,7 +108,7 @@ def main():
         help="Serial communication baud rate.",
     )
     args = parser.parse_args()
-    two_position_control(flex.FlexSEA(), args.port[0], args.baud_rate)
+    bandwidth_test(flex.FlexSEA(), args.port[0], args.baud_rate)
 
 
 if __name__ == "__main__":
