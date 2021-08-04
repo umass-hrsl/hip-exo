@@ -39,7 +39,7 @@ def bandwidth_test(
 
     # Setting angle waypoints
     f0 = 1
-    f1 = 15
+    f1 = 5
     t1 = 10
     t = np.linspace(0, 10, 7000)
     position = chirp(t, f0, f1, t1, method='logarithmic')
