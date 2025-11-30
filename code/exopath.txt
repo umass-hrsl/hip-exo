@@ -1,0 +1,2 @@
+cd Actuator-Package/Python/flexsea_demo/flexsea_demos/exo_files
+python bilateral_impedance_experiment.py
